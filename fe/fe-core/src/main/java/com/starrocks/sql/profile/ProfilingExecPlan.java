@@ -96,6 +96,7 @@ public class ProfilingExecPlan {
         private final List<Integer> multiSinkIds = Lists.newArrayList();
         private final TreeSet<String> titleAttributes = Sets.newTreeSet();
         private final Map<String, String> uniqueInfos = Maps.newLinkedHashMap();
+        private final List<Expr> conjuncts = Lists.newArrayList();
 
         private String displayName;
         private Statistics statistics;
@@ -166,6 +167,10 @@ public class ProfilingExecPlan {
 
         public double getTotalCost() {
             return totalCost;
+        }
+
+        public List<Expr> getConjuncts() {
+            return conjuncts;
         }
 
         public boolean isMemoryConsumingOperator() {
@@ -273,6 +278,7 @@ public class ProfilingExecPlan {
         buildTitleAttribute(node, element);
         buildUniqueInfos(node, element);
         buildDisplayName(node, element);
+        element.conjuncts.addAll(node.getConjuncts());
 
         for (PlanNode child : node.getChildren()) {
             element.addChild(visitNode(execPlan, child, visitedElements));

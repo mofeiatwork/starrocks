@@ -34,12 +34,14 @@
 
 package com.starrocks.common.util;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.thrift.TCounterAggregateType;
 import com.starrocks.thrift.TCounterMergeType;
 import com.starrocks.thrift.TCounterMinMaxType;
 import com.starrocks.thrift.TCounterStrategy;
 import com.starrocks.thrift.TUnit;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 
@@ -112,6 +114,21 @@ public class Counter {
                 || TUnit.TIME_NS == type
                 || TUnit.TIME_MS == type
                 || TUnit.TIME_S == type;
+    }
+
+    public Duration toDuration() {
+        TUnit unit = TUnit.findByValue(this.type);
+        Preconditions.checkState(isTimeType(unit), "must be time type");
+        switch (unit) {
+            case TIME_NS:
+                return Duration.ofNanos(value);
+            case TIME_MS:
+                return Duration.ofMillis(value);
+            case TIME_S:
+                return Duration.ofSeconds(value);
+            default:
+                throw new IllegalArgumentException("unknown unit: " + unit);
+        }
     }
 
     public static TCounterStrategy createStrategy(TUnit type) {

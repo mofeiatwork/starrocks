@@ -1017,7 +1017,7 @@ public class StmtExecutor {
 
             // diagnose the profile if necessary
             if (Config.enable_profile_diagnose) {
-
+                ExplainAnalyzer.diagnose(profilingPlan, profile);
             }
 
             // write the profile log if necessary

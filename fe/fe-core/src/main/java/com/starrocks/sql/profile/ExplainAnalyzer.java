@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.Expr;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.ProfileManager;
@@ -42,6 +43,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -121,6 +123,7 @@ public class ExplainAnalyzer {
     }
 
     private final ProfilingExecPlan plan;
+    private final RuntimeProfile queryProfile;
     private final RuntimeProfile summaryProfile;
     private final RuntimeProfile plannerProfile;
     private final RuntimeProfile executionProfile;
@@ -147,10 +150,12 @@ public class ExplainAnalyzer {
         this.plan = plan;
         this.colorExplainOutput = colorExplainOutput;
         if (this.plan == null) {
+            this.queryProfile = null;
             this.summaryProfile = null;
             this.plannerProfile = null;
             this.executionProfile = null;
         } else {
+            this.queryProfile = queryProfile;
             this.summaryProfile = queryProfile.getChild("Summary");
             this.plannerProfile = queryProfile.getChild("Planner");
             this.executionProfile = queryProfile.getChild("Execution");
@@ -194,12 +199,61 @@ public class ExplainAnalyzer {
     }
 
     /**
-     * Only parse the structured information of query profile but not give advice
+     * Diagnose the structured information of query profile, and add a section `Diagnosis` into profile
      */
-    public static ExplainAnalyzer parseProfile(ProfilingExecPlan plan, RuntimeProfile profile) {
+    public static void diagnose(ProfilingExecPlan plan, RuntimeProfile profile) {
         ExplainAnalyzer analyzer = new ExplainAnalyzer(plan, profile, null, false);
         analyzer.parseProfile();
-        return analyzer;
+        analyzer.diagnoseProfile();
+    }
+
+    private void diagnoseProfile() {
+        RuntimeProfile diagnosisProfile = new RuntimeProfile("Diagnosis");
+        queryProfile.addChild(diagnosisProfile);
+        for (var entry : allNodeInfos.entrySet()) {
+            NodeInfo node = entry.getValue();
+            if (node.element == null) {
+                continue;
+            }
+
+            // check cardinality estimation
+            long outputRows = node.outputRowNum.getValue();
+            double estOutputRows = node.element.getStatistics().getOutputRowCount();
+            if (incorrectEstimatedCardinality(outputRows, estOutputRows)) {
+                diagnosisProfile.addInfoString("Incorrect estimation", node.getTitle());
+            }
+
+            // check join order
+            if (node.element.instanceOf(JoinNode.class)) {
+                Preconditions.checkState(node.element.getChildren().size() == 2);
+                ProfilingExecPlan.ProfilingElement left = node.element.getChild(0);
+                ProfilingExecPlan.ProfilingElement right = node.element.getChild(1);
+                NodeInfo leftNode = allNodeInfos.get(left.getId());
+                NodeInfo rightNode = allNodeInfos.get(right.getId());
+
+                if (left.getStatistics().getOutputRowCount() >= right.getStatistics().getOutputRowCount() &&
+                        leftNode.outputRowNum.getValue() < rightNode.outputRowNum.getValue()) {
+                    diagnosisProfile.addInfoString("Bad Join Order", String.format("%d JOIN %d",
+                            leftNode.outputRowNum.getValue(), rightNode.outputRowNum.getValue()));
+                }
+            }
+
+            // inefficient predicate
+            if (node.element.instanceOf(ScanNode.class)) {
+                FilterInfo filterInfo = node.filterInfo;
+                Pair<Long, Duration> predFilter = filterInfo.getPredFilter();
+                // TODO: find the dominated filter
+                if (predFilter.second.toMillis() > 100) {
+                    List<Expr> conjuncts = node.element.getConjuncts();
+                }
+            }
+
+        }
+    }
+
+    private static boolean incorrectEstimatedCardinality(long real, double est) {
+        double ratio = Math.abs(est - real) / (real + 1);
+        return ratio > 1;
     }
 
     private String analyze() {
@@ -295,12 +349,12 @@ public class ExplainAnalyzer {
         // Setup output rows
         allNodeInfos.values().forEach(nodeInfo -> {
             if (nodeInfo.planNodeId == FINAL_SINK_PSEUDO_PLAN_NODE_ID) {
-                nodeInfo.outputRowNums = searchOutputRows(nodeInfo, "CommonMetrics", "PushRowNum");
+                nodeInfo.outputRowNum = searchOutputRows(nodeInfo, "CommonMetrics", "PushRowNum");
             } else if (nodeInfo.element.instanceOf(UnionNode.class)) {
-                nodeInfo.outputRowNums = sumUpMetric(nodeInfo, SearchMode.NATIVE_ONLY,
+                nodeInfo.outputRowNum = sumUpMetric(nodeInfo, SearchMode.NATIVE_ONLY,
                         false, "CommonMetrics", "PullRowNum");
             } else {
-                nodeInfo.outputRowNums = searchOutputRows(nodeInfo, "CommonMetrics", "PullRowNum");
+                nodeInfo.outputRowNum = searchOutputRows(nodeInfo, "CommonMetrics", "PullRowNum");
             }
 
             // Broadcast exchange
@@ -311,7 +365,7 @@ public class ExplainAnalyzer {
                         nodeInfo.fragmentProfile != null) {
                     Counter instanceNum = nodeInfo.fragmentProfile.getCounter("InstanceNum");
                     if (instanceNum != null && instanceNum.getValue() > 0) {
-                        nodeInfo.outputRowNums.setValue(nodeInfo.outputRowNums.getValue() / instanceNum.getValue());
+                        nodeInfo.outputRowNum.setValue(nodeInfo.outputRowNum.getValue() / instanceNum.getValue());
                     }
                 }
             }
@@ -572,7 +626,7 @@ public class ExplainAnalyzer {
             appendDetailLine(items.toArray());
 
             // Output Rows
-            appendDetailLine("OutputRows: ", resultNodeInfo.outputRowNums);
+            appendDetailLine("OutputRows: ", resultNodeInfo.outputRowNum);
         }
         sink.getUniqueInfos().forEach((key, value) -> appendDetailLine(key, ": ", value));
 
@@ -595,6 +649,7 @@ public class ExplainAnalyzer {
         NodeInfo nodeInfo = allNodeInfos.get(planNodeId);
         Preconditions.checkNotNull(nodeInfo);
 
+        nodeInfo.computeFilterInfo();
         nodeInfo.computeTimeUsage(cumulativeOperatorTime);
         nodeInfo.computeMemoryUsage();
         if (colorExplainOutput) {
@@ -687,7 +742,7 @@ public class ExplainAnalyzer {
         appendDetailLine(items.toArray());
 
         // 3. Output Rows
-        appendDetailLine("OutputRows: ", nodeInfo.outputRowNums);
+        appendDetailLine("OutputRows: ", nodeInfo.outputRowNum);
 
         // 4. Memory Infos
         if (nodeInfo.element.isMemoryConsumingOperator()) {
@@ -707,9 +762,9 @@ public class ExplainAnalyzer {
         // 6. Progress Percentage
         if (isRuntimeProfile && nodeInfo.state.isRunning()) {
             Counter totalRowNum = getTotalRowNum(nodeInfo);
-            if (totalRowNum != null && totalRowNum.getValue() > 0 && nodeInfo.outputRowNums != null) {
+            if (totalRowNum != null && totalRowNum.getValue() > 0 && nodeInfo.outputRowNum != null) {
                 appendDetailLine(String.format("Progress (processed rows/total rows): %.2f%%",
-                        100.0 * nodeInfo.outputRowNums.getValue() / totalRowNum.getValue()));
+                        100.0 * nodeInfo.outputRowNum.getValue() / totalRowNum.getValue()));
             } else {
                 appendDetailLine("Progress (processed rows/total rows): ?");
             }
@@ -738,7 +793,7 @@ public class ExplainAnalyzer {
             if (curNodeInfo.state.isInit()) {
                 return null;
             } else if (curNodeInfo.state.isFinished()) {
-                return curNodeInfo.outputRowNums;
+                return curNodeInfo.outputRowNum;
             } else if (cur.instanceOf(AggregationNode.class)) {
                 return null;
             } else if (CollectionUtils.isEmpty(cur.getChildren()) || cur.getChildren().size() > 1) {
@@ -1176,6 +1231,37 @@ public class ExplainAnalyzer {
         }
     }
 
+    private static final class FilterInfo {
+        private Counter bitmapFilterRows;
+        private Counter bitmapFilterTime;
+        private Counter shortKeyFilterTime;
+        private Counter shortKeyFilterRows;
+        private Counter zoneMapFilterTime;
+        private Counter zoneMapFilterRows;
+        private Counter predFilterTime;
+        private Counter predFilterRows;
+        // TODO: more filters
+
+        public Pair<Long, Duration> getPredFilter() {
+            return Pair.create(predFilterRows.getValue(), Duration.ofNanopredFilterTime.getValue())
+        }
+
+        static class Builder {
+            private Counter bitmapFilterRows;
+            private Counter bitmapFilterTime;
+
+            public Builder addBitmapIndex(Counter time, Counter rows) {
+                this.bitmapFilterRows = rows;
+                this.bitmapFilterTime = time;
+                return this;
+            }
+
+            public FilterInfo build() {
+                return new FilterInfo();
+            }
+        }
+    }
+
     // This structure is designed to hold all the information of a node, including plan stage information
     // as well as runtime stage information.
     private static final class NodeInfo {
@@ -1195,10 +1281,14 @@ public class ExplainAnalyzer {
         private Counter totalTime;
         private Counter cpuTime;
         private Counter networkTime;
-        private Counter scanTime;
-        private Counter outputRowNums;
+        private Counter outputRowNum;
         private Counter peekMemory;
         private Counter allocatedMemory;
+
+        // scan
+        private Counter scanTime;
+        private FilterInfo filterInfo;
+
         private double totalTimePercentage;
         private boolean isMostConsuming;
         private boolean isSecondMostConsuming;
@@ -1261,6 +1351,21 @@ public class ExplainAnalyzer {
         public void merge(NodeInfo other) {
             this.operatorProfiles.addAll(other.operatorProfiles);
             this.subordinateOperatorProfiles.addAll(other.subordinateOperatorProfiles);
+        }
+
+        private void computeFilterInfo() {
+            if (element.instanceOf(ScanNode.class)) {
+                Counter bitmapFilterTime = sumUpMetric(this, SearchMode.BOTH, true,
+                        "UniqueMetrics", "IOTaskExecTime", "SegmentInit", "BitmapIndexFilter");
+                Counter bitmapFilterRows = sumUpMetric(this, SearchMode.BOTH, true,
+                        "UniqueMetrics", "IOTaskExecTime", "SegmentInit", "BitmapIndexRows");
+                // TODO: other filters
+                this.filterInfo = new FilterInfo.Builder()
+                        .addBitmapIndex(bitmapFilterTime, bitmapFilterRows)
+                        .build();
+            } else {
+                Counter predicateTime = sumUpMetric(this, SearchMode.BOTH, true, "CommonMetrics", "ConjunctsTime");
+            }
         }
 
         public void computeTimeUsage(long cumulativeOperatorTime) {
