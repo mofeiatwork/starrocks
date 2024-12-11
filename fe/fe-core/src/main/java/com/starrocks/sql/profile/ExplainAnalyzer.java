@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql;
+package com.starrocks.sql.profile;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -21,7 +21,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.ProfileManager;
-import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.ExchangeNode;
@@ -63,6 +62,9 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.qe.scheduler.QueryRuntimeProfile.LOAD_CHANNEL_PROFILE_NAME;
 
+/**
+ * Implement the ANALYZE PROFILE function, give some advice based on the query profile
+ */
 public class ExplainAnalyzer {
     private static final Logger LOG = LogManager.getLogger(ExplainAnalyzer.class);
 
@@ -85,29 +87,7 @@ public class ExplainAnalyzer {
             "IOTaskWaitTime", "IOTaskExecTime"
     );
 
-    private static int getPlanNodeId(RuntimeProfile operator) {
-        Matcher matcher = PLAN_NODE_ID.matcher(operator.getName());
-        Preconditions.checkState(matcher.matches());
-        return Integer.parseInt(matcher.group(1));
-    }
 
-    public static String analyze(ProfilingExecPlan plan,
-                                 RuntimeProfile profile,
-                                 List<Integer> planNodeIds,
-                                 boolean colorExplainOutput) {
-        LOG.debug("plan {} profile {} planNodeIds {}", plan, profile, planNodeIds);
-        if (plan == null && profile.getChild("Summary") != null) {
-            String loadType = profile.getChild("Summary").getInfoString(ProfileManager.LOAD_TYPE);
-            if (loadType != null && (loadType.equals(ProfileManager.LOAD_TYPE_STREAM_LOAD)
-                    || loadType.equals(ProfileManager.LOAD_TYPE_ROUTINE_LOAD))) {
-                StringBuilder builder = new StringBuilder();
-                profile.prettyPrint(builder, "");
-                return builder.toString();
-            }
-        }
-        ExplainAnalyzer analyzer = new ExplainAnalyzer(plan, profile, planNodeIds, colorExplainOutput);
-        return analyzer.analyze();
-    }
 
     private enum GraphElement {
         LST_OPERATOR_INDENT("└──"),
@@ -180,7 +160,49 @@ public class ExplainAnalyzer {
         }
     }
 
-    public String analyze() {
+    private static int getPlanNodeId(RuntimeProfile operator) {
+        Matcher matcher = PLAN_NODE_ID.matcher(operator.getName());
+        Preconditions.checkState(matcher.matches());
+        return Integer.parseInt(matcher.group(1));
+    }
+
+    /**
+     * Give advice based on the query plan and profile
+     *
+     * @param plan               query profiling plan
+     * @param profile            query profile
+     * @param planNodeIds        target plan node to be analyzed
+     * @param colorExplainOutput whether generate the output with color
+     * @return the advice
+     */
+    public static String analyze(ProfilingExecPlan plan,
+                                 RuntimeProfile profile,
+                                 List<Integer> planNodeIds,
+                                 boolean colorExplainOutput) {
+        LOG.debug("plan {} profile {} planNodeIds {}", plan, profile, planNodeIds);
+        if (plan == null && profile.getChild("Summary") != null) {
+            String loadType = profile.getChild("Summary").getInfoString(ProfileManager.LOAD_TYPE);
+            if (loadType != null && (loadType.equals(ProfileManager.LOAD_TYPE_STREAM_LOAD)
+                    || loadType.equals(ProfileManager.LOAD_TYPE_ROUTINE_LOAD))) {
+                StringBuilder builder = new StringBuilder();
+                profile.prettyPrint(builder, "");
+                return builder.toString();
+            }
+        }
+        ExplainAnalyzer analyzer = new ExplainAnalyzer(plan, profile, planNodeIds, colorExplainOutput);
+        return analyzer.analyze();
+    }
+
+    /**
+     * Only parse the structured information of query profile but not give advice
+     */
+    public static ExplainAnalyzer parseProfile(ProfilingExecPlan plan, RuntimeProfile profile) {
+        ExplainAnalyzer analyzer = new ExplainAnalyzer(plan, profile, null, false);
+        analyzer.parseProfile();
+        return analyzer;
+    }
+
+    private String analyze() {
         if (plan == null || summaryProfile == null || executionProfile == null) {
             return null;
         }

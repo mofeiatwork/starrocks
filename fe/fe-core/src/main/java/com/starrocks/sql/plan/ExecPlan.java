@@ -20,7 +20,6 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
-import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.planner.ExecGroup;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
@@ -34,6 +33,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.profile.ProfilingExecPlan;
 import com.starrocks.thrift.TExplainLevel;
 
 import java.util.ArrayList;

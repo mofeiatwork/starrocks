@@ -15,6 +15,7 @@ package com.starrocks.common.util;
 
 import com.google.common.collect.Sets;
 import com.starrocks.planner.PlanNode;
+import com.starrocks.sql.profile.ProfilingExecPlan;
 import org.junit.Assert;
 import org.junit.Test;
 
