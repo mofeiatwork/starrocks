@@ -17,12 +17,15 @@ y = data['memCostBytes']
 # Split the data into training and testing sets
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# Apply log transformation on both training and testing sets
-X_train = np.right_shift(X_train, 20)  
-X_test = np.right_shift(X_test, 20) 
-y_train = np.right_shift(y_train, 20)
-y_test = np.right_shift(y_test, 20)
-
+# Apply transformation on both training and testing sets
+# X_train = np.right_shift(X_train, 10) 
+# X_test = np.right_shift(X_test, 10) 
+# y_train = np.right_shift(y_train, 10)
+# y_test = np.right_shift(y_test, 10)
+# X_train = np.log(X_train) 
+# X_test = np.log(X_test) 
+# y_train = np.log(y_train)
+# y_test = np.log(y_test)
 
 
 # Convert to DMatrix format, the efficient data format recommended by XGBoost
@@ -65,16 +68,29 @@ max_mem_cost = y_train.max()
 mean_mem_cost = y_train.mean()
 stddev_mem_cost = y_train.std()
 
-print(f"Min of 'memCostBytes' in Y_train: {min_mem_cost}")
-print(f"Max of 'memCostBytes' in Y_train: {max_mem_cost}")
-print(f"Mean of 'memCostBytes' in Y_train: {mean_mem_cost}")
-print(f"Stddev of 'memCostBytes' in Y_train: {stddev_mem_cost}")
+# Convert bytes to human-readable format
+def bytes_to_human_readable(bytes):
+    if bytes < 1024:
+        return f"{bytes} bytes"
+    elif bytes < 1048576:
+        return f"{bytes/1024:.2f} KB"
+    elif bytes < 1073741824:
+        return f"{bytes/1048576:.2f} MB"
+    elif bytes < 1099511627776:
+        return f"{bytes/1073741824:.2f} GB"
+    else:
+        return f"{bytes/1099511627776:.2f} TB"
+
+print(f"Min of 'memCostBytes' in Y_train: {bytes_to_human_readable(min_mem_cost)}")
+print(f"Max of 'memCostBytes' in Y_train: {bytes_to_human_readable(max_mem_cost)}")
+print(f"Mean of 'memCostBytes' in Y_train: {bytes_to_human_readable(mean_mem_cost)}")
+print(f"Stddev of 'memCostBytes' in Y_train: {bytes_to_human_readable(stddev_mem_cost)}")
 
 # Evaluate the model
 rmse = np.sqrt(mean_squared_error(y_test, y_pred))
 mae = mean_absolute_error(y_test, y_pred)
-print(f"RMSE on test set: {rmse}")
-print(f"MAE on test set: {mae}")
+print(f"RMSE on test set: {bytes_to_human_readable(rmse)}")
+print(f"MAE on test set: {bytes_to_human_readable(mae)}")
 
 # Save the model
 model.save_model('xgboost_sql_model.json')
