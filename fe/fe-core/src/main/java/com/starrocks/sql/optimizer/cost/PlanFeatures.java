@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -53,7 +54,7 @@ public class PlanFeatures {
                 start < OperatorType.SCALAR.ordinal();
                 start++) {
             result.add(start);
-            List<Integer> vector = sumVector.get(start);
+            List<Integer> vector = sumVector.get(OperatorType.values()[start]);
             if (vector != null) {
                 result.addAll(vector);
             } else {
@@ -69,8 +70,12 @@ public class PlanFeatures {
         List<Integer> vector = tree.toVector();
         OperatorType opType = tree.features.opType;
         List<Integer> exist = sum.computeIfAbsent(opType, (x) -> Lists.newArrayList());
-        for (int i = 0; i < exist.size(); i++) {
-            exist.set(i, vector.get(i) + exist.get(i));
+        if (CollectionUtils.isEmpty(exist)) {
+            sum.put(opType, vector);
+        } else {
+            for (int i = 0; i < exist.size(); i++) {
+                exist.set(i, vector.get(i) + exist.get(i));
+            }
         }
 
         // recursive

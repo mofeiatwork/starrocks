@@ -164,6 +164,14 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                         AuditLog.getSlowAudit().log(sb.toString());
                     }
                 }
+                if (Config.enable_plan_feature_collection && event.features != null) {
+                    StringBuilder execution = new StringBuilder();
+                    execution.append("cpuCostNs=").append(event.cpuCostNs);
+                    execution.append("|memCostBytes=").append(event.memCostBytes);
+                    execution.append("|features=").append(event.features);
+                    AuditLog.getFeaturesAudit().info(execution.toString());
+                }
+                event.features = null;
                 if (Config.audit_log_json_format) {
                     AuditLog.getQueryAudit().log(objectMapper.writeValueAsString(logMap));
                 } else {

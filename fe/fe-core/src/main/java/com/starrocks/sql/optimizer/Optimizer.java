@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
@@ -304,9 +305,11 @@ public class Optimizer {
         final CostEstimate costs = Explain.buildCost(result);
         connectContext.getAuditEventBuilder().setPlanCpuCosts(costs.getCpuCost())
                 .setPlanMemCosts(costs.getMemoryCost());
-        PlanFeatures.FeatureVector featureVector = Explain.buildFeatures(result);
-        String features = featureVector.toFeatureString();
-        connectContext.getAuditEventBuilder().setPlanFeatures(features);
+        if (Config.enable_plan_feature_collection) {
+            PlanFeatures.FeatureVector featureVector = Explain.buildFeatures(result);
+            String features = featureVector.toFeatureString();
+            connectContext.getAuditEventBuilder().setPlanFeatures(features);
+        }
 
         OptExpression finalPlan;
         try (Timer ignored = Tracers.watchScope("PhysicalRewrite")) {
