@@ -5,17 +5,18 @@ import sys
 # Define the parsing function
 def parse_line(line):
     """
-    Parse a single line of data, extract cpuCostNs, memCostBytes and features.
+    Parse a single line of data, extract cpuCostNs, memCostBytes, features, and extra digest field.
     """
-    match = re.search(r'cpuCostNs=(\d+)\|memCostBytes=(\d+)\|features=([\d,]+)', line)
+    match = re.search(r'digest=([\w]+)\|cpuCostNs=(\d+)\|memCostBytes=(\d+)\|features=([\d,]+)', line)
     if match:
-        cpu_cost = int(match.group(1))
-        mem_cost = int(match.group(2))
+        digest = match.group(1)
+        cpu_cost = int(match.group(2))
+        mem_cost = int(match.group(3))
         # Rule out the zero cpu_cost or mem_cost
         if cpu_cost == 0 or mem_cost == 0:
             return None
-        features = list(map(int, match.group(3).split(',')))
-        return [cpu_cost, mem_cost] + features
+        features = list(map(int, match.group(4).split(',')))
+        return [digest, cpu_cost, mem_cost] + features
     return None
 
 def process_file(input_file, output_file):
@@ -31,7 +32,7 @@ def process_file(input_file, output_file):
             if parsed:
                 # Write the header
                 if not header_written:
-                    header = ['cpuCostNs', 'memCostBytes'] + [f'feature_{i}' for i in range(len(parsed) - 2)]
+                    header = ['digest', 'cpuCostNs', 'memCostBytes'] + [f'feature_{i}' for i in range(len(parsed) - 2)]
                     writer.writerow(header)
                     header_written = True
                 # Write the data
