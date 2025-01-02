@@ -166,7 +166,8 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                 }
                 if (Config.enable_plan_feature_collection && event.features != null) {
                     StringBuilder execution = new StringBuilder();
-                    execution.append("cpuCostNs=").append(event.cpuCostNs);
+                    execution.append("digest=").append(event.digest);
+                    execution.append("|cpuCostNs=").append(event.cpuCostNs);
                     execution.append("|memCostBytes=").append(event.memCostBytes);
                     execution.append("|features=").append(event.features);
                     AuditLog.getFeaturesAudit().info(execution.toString());
