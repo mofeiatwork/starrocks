@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.cost.CostModel;
+import com.starrocks.sql.optimizer.cost.PlanFeatures;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
@@ -121,6 +122,10 @@ public class Explain {
             totalCost = CostEstimate.addCost(totalCost, curCost);
         }
         return totalCost;
+    }
+
+    public static PlanFeatures.FeatureVector buildFeatures(OptExpression optExpr) {
+        return PlanFeatures.flattenFeatures(optExpr);
     }
 
     private static class OperatorStr {

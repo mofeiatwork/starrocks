@@ -33,6 +33,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
+import com.starrocks.sql.optimizer.cost.PlanFeatures;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
@@ -303,6 +304,10 @@ public class Optimizer {
         final CostEstimate costs = Explain.buildCost(result);
         connectContext.getAuditEventBuilder().setPlanCpuCosts(costs.getCpuCost())
                 .setPlanMemCosts(costs.getMemoryCost());
+        PlanFeatures.FeatureVector featureVector = Explain.buildFeatures(result);
+        String features = featureVector.toFeatureString();
+        connectContext.getAuditEventBuilder().setPlanFeatures(features);
+
         OptExpression finalPlan;
         try (Timer ignored = Tracers.watchScope("PhysicalRewrite")) {
             finalPlan = physicalRuleRewrite(connectContext, rootTaskContext, result);
