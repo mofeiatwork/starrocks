@@ -27,7 +27,7 @@ import org.apache.commons.collections.CollectionUtils;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.IntStream;
+import java.util.stream.LongStream;
 
 /**
  * Features for physical plan
@@ -42,19 +42,19 @@ public class PlanFeatures {
         OperatorWithFeatures root = plan.getOp().accept(extractor, plan, builder);
 
         // summarize by operator type
-        Map<OperatorType, List<Integer>> sumVector = Maps.newHashMap();
+        Map<OperatorType, List<Long>> sumVector = Maps.newHashMap();
         sumByOperatorType(root, sumVector);
         int dummyLength = OperatorFeatures.numFeatures();
         // Generate a list of integers of length dummyLength filled with 0
-        List<Integer> dummyList = IntStream.range(0, dummyLength).map(i -> 0).boxed().toList();
+        List<Long> dummyList = LongStream.range(0, dummyLength).map(i -> 0).boxed().toList();
 
         // transform into a equal-size vector
-        List<Integer> result = Lists.newArrayList();
+        List<Long> result = Lists.newArrayList();
         for (int start = OperatorType.PHYSICAL.ordinal();
                 start < OperatorType.SCALAR.ordinal();
                 start++) {
-            result.add(start);
-            List<Integer> vector = sumVector.get(OperatorType.values()[start]);
+            result.add((long) start);
+            List<Long> vector = sumVector.get(OperatorType.values()[start]);
             if (vector != null) {
                 result.addAll(vector);
             } else {
@@ -66,10 +66,10 @@ public class PlanFeatures {
     }
 
     private static void sumByOperatorType(OperatorWithFeatures tree,
-                                          Map<OperatorType, List<Integer>> sum) {
-        List<Integer> vector = tree.toVector();
+                                          Map<OperatorType, List<Long>> sum) {
+        List<Long> vector = tree.toVector();
         OperatorType opType = tree.features.opType;
-        List<Integer> exist = sum.computeIfAbsent(opType, (x) -> Lists.newArrayList());
+        List<Long> exist = sum.computeIfAbsent(opType, (x) -> Lists.newArrayList());
         if (CollectionUtils.isEmpty(exist)) {
             sum.put(opType, vector);
         } else {
@@ -85,9 +85,9 @@ public class PlanFeatures {
     }
 
     public static class FeatureVector {
-        List<Integer> vector;
+        List<Long> vector;
 
-        public FeatureVector(List<Integer> vector) {
+        public FeatureVector(List<Long> vector) {
             this.vector = vector;
         }
 
@@ -108,7 +108,7 @@ public class PlanFeatures {
             return res;
         }
 
-        public List<Integer> toVector() {
+        public List<Long> toVector() {
             return features.toVector();
         }
     }
@@ -131,11 +131,11 @@ public class PlanFeatures {
             return res;
         }
 
-        public List<Integer> toVector() {
-            List<Integer> res = Lists.newArrayList();
-            res.add((int) cost.getMemoryCost());
-            res.add((int) stats.getOutputRowCount());
-            res.add((int) stats.getAvgRowSize());
+        public List<Long> toVector() {
+            List<Long> res = Lists.newArrayList();
+            res.add((long) cost.getMemoryCost());
+            res.add((long) stats.getOutputRowCount());
+            res.add((long) stats.getAvgRowSize());
 
             return res;
         }
