@@ -4337,6 +4337,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableArrayDistinctAfterAggOpt;
     }
 
+    public int getIoTasksPerScanOperator() {
+        return ioTasksPerScanOperator;
+    }
+
     public long getConnectorMaxSplitSize() {
         return connectorMaxSplitSize;
     }
