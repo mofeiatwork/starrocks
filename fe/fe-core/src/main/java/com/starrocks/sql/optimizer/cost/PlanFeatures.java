@@ -26,7 +26,6 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.LongStream;
 
 /**
  * Features for physical plan
@@ -43,14 +42,9 @@ public class PlanFeatures {
         // summarize by operator type
         Map<OperatorType, SummarizedFeature> sumVector = Maps.newHashMap();
         sumByOperatorType(root, sumVector);
-        int dummyLength = SummarizedFeature.numFeatures();
-        // Generate a list of integers of length dummyLength filled with 0
-        List<Long> dummyList = LongStream.range(0, dummyLength).map(i -> 0).boxed().toList();
-
         FeatureVector result = new FeatureVector();
 
         // TODO: Add plan features
-
         // Add operator features
         for (int start = OperatorType.PHYSICAL.ordinal();
                 start < OperatorType.SCALAR.ordinal();
@@ -60,7 +54,7 @@ public class PlanFeatures {
             if (vector != null) {
                 result.add(vector.finish());
             } else {
-                result.add(dummyList);
+                result.add(SummarizedFeature.empty(opType));
             }
         }
 
@@ -107,6 +101,16 @@ public class PlanFeatures {
             result.add((long) count);
             if (vector != null) {
                 result.addAll(vector.vector);
+            }
+            return new FeatureVector(result);
+        }
+
+        public static FeatureVector empty(OperatorType type) {
+            List<Long> result = Lists.newArrayList();
+            result.add((long) type.ordinal());
+            result.add((long) 0);
+            for (int i = 0; i < OperatorFeatures.numFeatures(); i++) {
+                result.add(0L);
             }
             return new FeatureVector(result);
         }
@@ -179,6 +183,7 @@ public class PlanFeatures {
 
         public List<Long> toVector() {
             List<Long> res = Lists.newArrayList();
+            // TODO: remove this feature, which has no impact to the model
             res.add((long) cost.getMemoryCost());
             res.add((long) stats.getOutputRowCount());
 

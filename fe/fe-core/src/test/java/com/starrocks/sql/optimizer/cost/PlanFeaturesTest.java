@@ -30,6 +30,7 @@ class PlanFeaturesTest extends PlanTestBase {
         String string = featureVector.toFeatureString();
         Assert.assertTrue(string, string.contains("44,1,1179648,1"));
         Assert.assertTrue(string, string.contains("40,1,8,1"));
+        Assert.assertTrue(string, string.contains(" 38,0,0,0"));
     }
 
 }
