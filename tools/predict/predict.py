@@ -18,6 +18,59 @@ def bytes_to_human_readable(bytes):
     else:
         return f"{bytes/1099511627776:.2f} TB"
 
+# log transformation: memory / 16MB
+def transform_predict(data):
+    return np.log2(data)
+    # return np.right_shift(data, 20)
+    # return np.divide(data, (1 << 20))
+
+def restore_predict(data):
+    return np.exp2(data)
+    # return np.left_shift(data, 20)
+    # return np.multiply(data, (1 << 20))
+
+def mean_absolute_percentage_error(y_true, y_pred):
+    y_true, y_pred = np.array(y_true), np.array(y_pred)
+    return np.mean(np.abs((y_true - y_pred) / y_true)) * 100
+    
+# Output the min, max, and mean of 'memCostBytes' in dataset
+def print_dataset_stats(y_test):
+    min_mem_cost = y_test.min()
+    max_mem_cost = y_test.max()
+    mean_mem_cost = y_test.mean()
+    stddev_mem_cost = y_test.std()
+    print(f"""
+          Min: {bytes_to_human_readable(min_mem_cost)}, 
+          Max: {bytes_to_human_readable(max_mem_cost)}, 
+          Mean: {bytes_to_human_readable(mean_mem_cost)}, 
+          Stddev: {bytes_to_human_readable(stddev_mem_cost)}
+          """)
+
+
+def evaluate_predict_result(y_pred, y_test):
+    # rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+    mae = mean_absolute_error(y_test, y_pred)
+    mae_ratio = mae / y_pred.mean()
+    mape = mean_absolute_percentage_error(y_test, y_pred)
+    # print(f"RMSE on test set: {bytes_to_human_readable(rmse)}")
+    # print(f"MAE on test set: {bytes_to_human_readable(mae)}")
+    # print(f"MAE on test set: {(mae)}")
+    # print(f"MAE/MEAN on test set: {mae_ratio:.3f}")
+    print(f"MAPE on test set: {mape:.3f}%")
+   
+    
+def evaluate_model_from_raw_data(test_data, model):
+    dnew = xgb.DMatrix(test_data.drop(columns=['cpuCostNs', 'memCostBytes', 'digest']))
+    y_pred = model.predict(dnew)
+    y_pred = restore_predict(y_pred)
+    y_new_true = test_data['memCostBytes']
+    evaluate_predict_result(y_pred, y_new_true)
+    
+def evaluate_model(dtest, y_true, model):
+    y_pred = model.predict(dtest)
+    # y_pred = restore_predict(y_pred)
+    evaluate_predict_result(y_pred, y_true)
+
 # Load the dataset
 # Assuming the dataset is a CSV file containing feature columns and target column 'execution_time'
 data = pd.read_csv('sql_features.csv')
@@ -30,7 +83,7 @@ y = data['memCostBytes']
 # Define the parameters for the model
 params = {
     'objective': 'reg:squarederror',
-    'eval_metric': 'mae',  # or 'rmse'
+    'eval_metric': 'mape',  # or 'rmse'
     'eta': 0.1,
     'max_depth': 8,
     'subsample': 0.8,
@@ -42,32 +95,22 @@ params = {
 
 # Split the dataset into training and testing sets
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+y_train = transform_predict(y_train)
+y_test = transform_predict(y_test)
 
 # Convert to DMatrix format, the efficient data format recommended by XGBoost
 dtrain = xgb.DMatrix(X_train, label=y_train)
 dtest = xgb.DMatrix(X_test, label=y_test)
 
 # Train the model
-num_rounds = 100
+num_rounds = 200
 evals = [(dtrain, 'train'), (dtest, 'test')]
 model = xgb.train(params, dtrain, num_rounds, evals, early_stopping_rounds=10)
 
 # Evaluate the model
-y_pred = model.predict(dtest)
-mae = mean_absolute_error(y_test, y_pred)
-rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-print(f"RMSE on train set: {bytes_to_human_readable(rmse)}")
-print(f"MAE on train set: {bytes_to_human_readable(mae)}")
+evaluate_model(dtest, y_test, model)
 
-# Output the min, max, and mean of 'memCostBytes' in X_train
-min_mem_cost = y_train.min()
-max_mem_cost = y_train.max()
-mean_mem_cost = y_train.mean()
-stddev_mem_cost = y_train.std()
-print(f"Min of 'memCostBytes' in Y_train: {bytes_to_human_readable(min_mem_cost)}")
-print(f"Max of 'memCostBytes' in Y_train: {bytes_to_human_readable(max_mem_cost)}")
-print(f"Mean of 'memCostBytes' in Y_train: {bytes_to_human_readable(mean_mem_cost)}")
-print(f"Stddev of 'memCostBytes' in Y_train: {bytes_to_human_readable(stddev_mem_cost)}")
+print_dataset_stats(restore_predict(y_test))
 
 # Save the model
 model.save_model('xgboost_sql_model.json')
@@ -80,10 +123,7 @@ y_new_pred = loaded_model.predict(dnew)
 
 # Predict using the loaded model
 test_data = pd.read_csv('test_data.csv')
-dnew = xgb.DMatrix(test_data.drop(columns=['cpuCostNs', 'memCostBytes', 'digest']))
-y_new_pred = loaded_model.predict(dnew)
-y_new_true = test_data['memCostBytes']
-rmse = np.sqrt(mean_squared_error(y_new_true, y_new_pred))
-mae = mean_absolute_error(y_new_true, y_new_pred)
-print(f"RMSE on new test set: {bytes_to_human_readable(rmse)}")
-print(f"MAE on new test set: {bytes_to_human_readable(mae)}")
+print("==========================================")
+print("evaluate the model on a brand-new test set")
+print_dataset_stats(test_data['memCostBytes'])
+evaluate_model_from_raw_data(test_data, model)
