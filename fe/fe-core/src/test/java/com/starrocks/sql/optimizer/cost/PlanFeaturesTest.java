@@ -28,9 +28,10 @@ class PlanFeaturesTest extends PlanTestBase {
         OptExpression physicalPlan = execPlan.getPhysicalPlan();
         PlanFeatures.FeatureVector featureVector = PlanFeatures.flattenFeatures(physicalPlan);
         String string = featureVector.toFeatureString();
-        Assert.assertTrue(string, string.contains("44,1,1179648,1"));
-        Assert.assertTrue(string, string.contains("40,1,8,1"));
-        Assert.assertTrue(string, string.contains(" 38,0,0,0"));
+        Assert.assertTrue(string, string.startsWith("0,0,10003"));
+        Assert.assertTrue(string, string.contains("38,0,0,0,0"));
+        Assert.assertTrue(string, string.contains("40,1,1,8,9"));
+        Assert.assertTrue(string, string.contains("44,1,1,1179648,9"));
     }
 
 }

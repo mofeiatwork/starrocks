@@ -169,8 +169,13 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                     execution.append("digest=").append(event.digest);
                     execution.append("|cpuCostNs=").append(event.cpuCostNs);
                     execution.append("|memCostBytes=").append(event.memCostBytes);
+                    execution.append("|scanBytes=").append(event.scanBytes);
+                    execution.append("|scanRows=").append(event.scanRows);
+                    execution.append("|returnRows=").append(event.returnRows);
+                    execution.append("|time=").append(event.queryTime);
                     execution.append("|features=").append(event.features);
                     AuditLog.getFeaturesAudit().info(execution.toString());
+                    event.features = null;
                 }
                 event.features = null;
                 if (Config.audit_log_json_format) {
