@@ -2,41 +2,60 @@ import re
 import csv
 import sys
 
+
 # Define the parsing function
 def parse_line(line):
     """
-    Parse a single line of data, extract cpuCostNs, memCostBytes, features, and extra digest field.
+    Parse a single line of data, extract digest, scanBytes, scanRows, returnRows, cpuCostNs, memCostBytes, features
     """
-    match = re.search(r'digest=([\w]+)\|cpuCostNs=(\d+)\|memCostBytes=(\d+)\|features=([\d,]+)', line)
+    match = re.search(
+        r"digest=([\w]+)\|cpuCostNs=(\d+)\|memCostBytes=(\d+)\|scanBytes=(\d+)\|scanRows=(\d+)\|returnRows=(\d+)\|time=\d+\|features=([\d,]+)",
+        line,
+    )
     if match:
         digest = match.group(1)
         cpu_cost = int(match.group(2))
         mem_cost = int(match.group(3))
+        scan_bytes = int(match.group(4))
+        scan_rows = int(match.group(5))
+        return_rows = int(match.group(6))
         # Rule out the zero cpu_cost or mem_cost
         if cpu_cost == 0 or mem_cost == 0:
             return None
-        features = list(map(int, match.group(4).split(',')))
-        return [digest, cpu_cost, mem_cost] + features
+        features = list(map(int, match.group(7).split(",")))
+        return [ digest, cpu_cost, mem_cost, scan_bytes, scan_rows, return_rows, ] + features
     return None
+
 
 def process_file(input_file, output_file):
     """
     Process the input file and write the parsing result to a CSV file.
     """
-    with open(input_file, 'r') as infile, open(output_file, 'w', newline='') as outfile:
+    with open(input_file, "r") as infile, open(output_file, "w", newline="") as outfile:
         writer = csv.writer(outfile)
         header_written = False
-        
+
+        rows = 0
         for line in infile:
+            rows += 1
             parsed = parse_line(line.strip())
             if parsed:
                 # Write the header
                 if not header_written:
-                    header = ['digest', 'cpuCostNs', 'memCostBytes'] + [f'feature_{i}' for i in range(len(parsed) - 2)]
+                    header = [
+                        "digest",
+                        "cpuCostNs",
+                        "memCostBytes",
+                        "scanBytes",
+                        "scanRows",
+                        "returnRows",
+                    ]  + [f"table_{i}" for i in range(3)] + [f"feature_{i}" for i in range(len(parsed) - 9)]
                     writer.writerow(header)
                     header_written = True
                 # Write the data
                 writer.writerow(parsed)
+        print(f"Parsed {rows} rows")
+
 
 # Main function
 if __name__ == "__main__":
@@ -45,7 +64,7 @@ if __name__ == "__main__":
         sys.exit()
     input_file = sys.argv[1]  # Read the input file name from the command line
     output_file = sys.argv[2]  # Read the output file name from the command line
-    
+
     print(f"Processing file: {input_file}")
     process_file(input_file, output_file)
     print(f"Data has been written to: {output_file}")
